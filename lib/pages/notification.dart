@@ -1,9 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
-import 'package:http/http.dart' as http;
+import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -13,246 +12,380 @@ class NotificationPage extends StatefulWidget {
 }
 
 class _NotificationPageState extends State<NotificationPage> {
-  late IO.Socket socket;
-  String imageUrl = '';
+  static const String _baseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'http://192.168.22.85:3000/api',
+  );
 
-  late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
+  List<Map<String, dynamic>> _items = [];
+  final Set<String> _actionLoadingIds = {};
+  bool _loading = true;
+  String? _error;
+  Timer? _pollTimer;
+  final String _sortBy = 'createdAt';
+  final String _order = 'desc';
 
   @override
   void initState() {
     super.initState();
-    initNotifications(); // Initialize notifications
-    fetchInitialImage();
-    initSocket();
-  }
-
-  void initNotifications() {
-    flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
-
-    const InitializationSettings initializationSettings =
-        InitializationSettings(android: initializationSettingsAndroid);
-
-    flutterLocalNotificationsPlugin.initialize(initializationSettings);
-  }
-
-  Future<void> showNotification(String title, String body) async {
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-          'image_channel',
-          'Image Notifications',
-          channelDescription: 'Notification channel for image uploads',
-          importance: Importance.max,
-          priority: Priority.high,
-          ticker: 'ticker',
-        );
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(
-      android: androidPlatformChannelSpecifics,
-    );
-    await flutterLocalNotificationsPlugin.show(
-      0,
-      title,
-      body,
-      platformChannelSpecifics,
-      payload: 'image_payload',
+    _fetchNeedsReview();
+    _pollTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) => _fetchNeedsReview(),
     );
   }
 
-  void initSocket() {
-    socket = IO.io('http:// 192.168.22.85:3000', <String, dynamic>{
-      'transports': ['websocket'],
-    });
-
-    socket.on('connect', (_) {
-      print('✅ Connected to socket server');
-    });
-
-    socket.on('new_image', (data) {
-      print('📸 New image received: $data');
-      setState(() {
-        imageUrl = data['url'];
-      });
-
-      // Show push notification
-      showNotification('New Image Received', 'A new image was uploaded.');
-
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('📸 New image received!'),
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    });
-
-    socket.on('disconnect', (_) {
-      print('🔌 Disconnected from socket');
-    });
-  }
-
-  Future<void> fetchInitialImage() async {
+  Future<void> _fetchNeedsReview() async {
     try {
-      final response = await http.get(
-        Uri.parse('http://192.168.22.85:3000/api/images'),
-      );
+      final params = <String, String>{
+        'limit': '100',
+        'sortBy': _sortBy,
+        'order': _order,
+      };
 
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        if (data.isNotEmpty) {
-          setState(() {
-            imageUrl = data[0]['url'];
-          });
-        }
-      } else {
-        print('❌ Failed to fetch image: ${response.statusCode}');
+      final uri = Uri.parse('$_baseUrl/needs-review')
+          .replace(queryParameters: params);
+      final response = await http.get(uri);
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        setState(() {
+          _error = 'Failed to fetch review queue: ${response.statusCode}';
+          _loading = false;
+        });
+        return;
       }
+
+      final List<dynamic> data = jsonDecode(response.body);
+      final mapped = data.map<Map<String, dynamic>>((item) {
+        return {
+          'id': item['id'] as String? ?? '',
+          'url': item['url'] as String? ?? '',
+          'species': item['species'] as String? ?? 'unknown',
+          'confidence': (item['confidence'] as num?)?.toDouble() ?? 0,
+          'riskScore': (item['riskScore'] as num?)?.toInt() ?? 0,
+          'priority': item['priority'] as String? ?? 'low',
+          'capturedAt': (item['capturedAt'] ?? item['createdAt']) as String?,
+          'zoneId': item['zoneId'] as String?,
+          'aiSummary': item['aiSummary'] as String?,
+          'status': item['status'] as String? ?? 'needs_review',
+          'riskReasons': (item['riskReasons'] as List<dynamic>? ?? [])
+              .map((e) => e.toString())
+              .toList(),
+        };
+      }).toList();
+
+      setState(() {
+        _items = mapped;
+        _loading = false;
+        _error = null;
+      });
     } catch (e) {
-      print('❌ Error: $e');
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to fetch review queue: $e';
+        _loading = false;
+      });
     }
   }
 
-  Future<void> captureImage() async {
+  Future<void> _takeAction(String id, String action) async {
+    setState(() {
+      _actionLoadingIds.add(id);
+    });
+
     try {
-      final response = await http.get(
-        Uri.parse('http://192.168.1.100/capture'),
+      final response = await http.patch(
+        Uri.parse('$_baseUrl/needs-review/$id/action'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'action': action}),
       );
 
-      if (response.statusCode == 200) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('📷 Capture command sent to ESP32-CAM!'),
-              duration: Duration(seconds: 2),
-            ),
-          );
-        }
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '❌ Failed to capture. Status: ${response.statusCode}',
-              ),
-              duration: const Duration(seconds: 2),
-            ),
-          );
-        }
+      if (!mounted) return;
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        setState(() {
+          _error = 'Failed to $action item: ${response.statusCode}';
+        });
+        return;
       }
+
+      await _fetchNeedsReview();
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ Error: $e'),
-            duration: const Duration(seconds: 2),
+      if (!mounted) return;
+      setState(() {
+        _error = 'Failed to $action item: $e';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _actionLoadingIds.remove(id);
+        });
+      }
+    }
+  }
+
+  void _openFullView(String imageUrl) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black,
+      builder: (context) {
+        return Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            backgroundColor: Colors.black,
+            elevation: 0,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 5,
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.broken_image,
+                  color: Colors.white70,
+                  size: 56,
+                ),
+              ),
+            ),
           ),
         );
-      }
+      },
+    );
+  }
+
+  String _formatCapturedTime(String? isoTime) {
+    if (isoTime == null || isoTime.isEmpty) return 'Unknown time';
+    try {
+      final dateTime = DateTime.parse(isoTime).toLocal();
+      final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
+      final minute = dateTime.minute.toString().padLeft(2, '0');
+      final period = dateTime.hour >= 12 ? 'PM' : 'AM';
+      return '${dateTime.month}/${dateTime.day}/${dateTime.year} $hour:$minute $period';
+    } catch (_) {
+      return 'Unknown time';
     }
   }
 
   @override
   void dispose() {
-    socket.dispose();
+    _pollTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF222222),
       appBar: AppBar(
-        title: const Text('Real-Time Image Upload'),
+        automaticallyImplyLeading: false,
         backgroundColor: Colors.black,
-      ),
-      backgroundColor: Colors.black87,
-      body: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Center(
-              child:
-                  imageUrl.isEmpty
-                      ? const CircularProgressIndicator()
-                      : ClipRRect(
-                        borderRadius: BorderRadius.circular(12),
-                        child: Image.network(
-                          imageUrl,
-                          fit: BoxFit.cover,
-                          errorBuilder:
-                              (context, error, stackTrace) => const Text(
-                                '⚠️ Failed to load image',
-                                style: TextStyle(color: Colors.white),
-                              ),
-                        ),
-                      ),
-            ),
+        elevation: 0,
+        title: const Text(
+          'Needs Review',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+            color: Colors.white,
           ),
-          if (imageUrl.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => FullscreenImagePage(url: imageUrl),
-                        ),
-                      );
-                    },
-                    icon: const Icon(Icons.fullscreen),
-                    label: const Text('View Fullscreen'),
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                    onPressed: captureImage,
-                    icon: const Icon(Icons.camera),
-                    label: const Text('Capture'),
-                  ),
-                  const SizedBox(height: 12),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      minimumSize: const Size(double.infinity, 48),
-                    ),
-                    onPressed: fetchInitialImage,
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Refresh Image'),
-                  ),
-                ],
-              ),
-            ),
-        ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(4),
+          child: Container(
+            margin: const EdgeInsets.only(left: 8, right: 150),
+            height: 3,
+            color: Colors.lightGreenAccent,
+          ),
+        ),
       ),
-    );
-  }
-}
-
-class FullscreenImagePage extends StatelessWidget {
-  final String url;
-  const FullscreenImagePage({required this.url, super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: const Text('Full Image View'),
-      ),
-      body: Center(child: InteractiveViewer(child: Image.network(url))),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Text(
+                    _error!,
+                    style: const TextStyle(color: Colors.redAccent),
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _fetchNeedsReview,
+                  child: ListView(
+                    padding: const EdgeInsets.all(12),
+                    children: [
+                      if (_items.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.only(top: 140),
+                          child: Center(
+                            child: Text(
+                              'No items need review',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                          ),
+                        )
+                      else
+                        ..._items.map((item) {
+                          final id = item['id'] as String;
+                          final confidence =
+                              ((item['confidence'] as double) * 100).toStringAsFixed(1);
+                          final reasons =
+                              (item['riskReasons'] as List<String>).join(', ');
+                          final isActionLoading = _actionLoadingIds.contains(id);
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[900],
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: GestureDetector(
+                                    onTap: () => _openFullView(item['url'] as String),
+                                    child: Image.network(
+                                      item['url'] as String,
+                                      height: 180,
+                                      width: double.infinity,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (_, __, ___) => Container(
+                                        height: 180,
+                                        color: Colors.grey[800],
+                                        child: const Icon(
+                                          Icons.broken_image,
+                                          color: Colors.white70,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  '${(item['species'] as String).toUpperCase()}  •  $confidence%',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Status: ${item['status']} • Risk ${item['riskScore']} • ${item['priority']}',
+                                  style: const TextStyle(
+                                    color: Colors.amber,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Time: ${_formatCapturedTime(item['capturedAt'] as String?)}',
+                                  style: const TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                if ((item['zoneId'] as String?) != null)
+                                  Text(
+                                    'Zone: ${item['zoneId']}',
+                                    style: const TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                if (reasons.isNotEmpty)
+                                  Text(
+                                    'Reasons: $reasons',
+                                    style: const TextStyle(
+                                      color: Colors.white60,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                if ((item['aiSummary'] as String?)?.trim().isNotEmpty ??
+                                    false) ...[
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black54,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      item['aiSummary'] as String,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: isActionLoading
+                                            ? null
+                                            : () => _takeAction(id, 'approve'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green[700],
+                                        ),
+                                        child: const Text('Approve'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: isActionLoading
+                                            ? null
+                                            : () => _takeAction(id, 'discard'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.red[700],
+                                        ),
+                                        child: const Text('Discard'),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: isActionLoading
+                                            ? null
+                                            : () => _takeAction(id, 'escalate'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.orange[700],
+                                        ),
+                                        child: isActionLoading
+                                            ? const SizedBox(
+                                                height: 16,
+                                                width: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                  color: Colors.white,
+                                                ),
+                                              )
+                                            : const Text('Escalate'),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
     );
   }
 }

@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
-import 'homepage.dart';
 
 class DeviceLocationPage extends StatefulWidget {
-  const DeviceLocationPage({Key? key}) : super(key: key);
+  const DeviceLocationPage({super.key});
 
   @override
   State<DeviceLocationPage> createState() => _DeviceLocationPageState();
@@ -15,25 +14,10 @@ class _DeviceLocationPageState extends State<DeviceLocationPage> {
   final List<String> _cameras = ['Camera 1', 'Camera 2', 'Camera 3'];
   late final MapController _mapController; // ✅ Added controller
 
-  int _selectedIndex = 1; // Since this is the search page
-
   @override
   void initState() {
     super.initState();
     _mapController = MapController(); // ✅ Initialize controller
-  }
-
-  void _onNavBarTapped(int index) {
-    if (index == 0) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
-      );
-    } else {
-      setState(() {
-        _selectedIndex = index;
-      });
-    }
   }
 
   @override

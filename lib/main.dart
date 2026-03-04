@@ -59,10 +59,15 @@ class WebSocketPage extends StatelessWidget {
     'ws:// 192.168.22.85:3000', // Replace with your actual IP and port
   );
 
+  WebSocketPage({super.key});
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('New Image Notifier')),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        title: const Text('New Image Notifier'),
+      ),
       body: StreamBuilder(
         stream: channel.stream,
         builder: (context, snapshot) {
