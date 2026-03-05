@@ -13,7 +13,7 @@ class ReportsPage extends StatefulWidget {
 class _ReportsPageState extends State<ReportsPage> {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.22.85:3000/api',
+    defaultValue: 'https://api.wildpulse.ink/api',
   );
 
   String _mode = 'daily';

@@ -16,7 +16,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.22.85:3000/api',
+    defaultValue: 'https://api.wildpulse.ink/api',
   );
 
   int _currentNavIndex = 0;

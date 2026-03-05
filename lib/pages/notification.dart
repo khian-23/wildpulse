@@ -14,7 +14,7 @@ class NotificationPage extends StatefulWidget {
 class _NotificationPageState extends State<NotificationPage> {
   static const String _baseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.22.85:3000/api',
+    defaultValue: 'https://api.wildpulse.ink/api',
   );
 
   List<Map<String, dynamic>> _items = [];
