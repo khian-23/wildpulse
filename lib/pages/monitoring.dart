@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
@@ -187,6 +188,19 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
     });
 
     try {
+      if (kIsWeb) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Web app: open image in a new tab then use browser Save image.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
       final response = await http.get(Uri.parse(imageUrl));
       if (!mounted) return;
 
@@ -200,10 +214,25 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
         return;
       }
 
-      final dir = await getApplicationDocumentsDirectory();
       final filename = 'wildpulse_${DateTime.now().millisecondsSinceEpoch}.jpg';
-      final file = File('${dir.path}/$filename');
-      await file.writeAsBytes(response.bodyBytes);
+      File file;
+      try {
+        if (Platform.isAndroid) {
+          final downloadDir = Directory('/storage/emulated/0/Download');
+          if (!await downloadDir.exists()) {
+            await downloadDir.create(recursive: true);
+          }
+          file = File('${downloadDir.path}/$filename');
+        } else {
+          final dir = await getApplicationDocumentsDirectory();
+          file = File('${dir.path}/$filename');
+        }
+        await file.writeAsBytes(response.bodyBytes);
+      } catch (_) {
+        final dir = await getApplicationDocumentsDirectory();
+        file = File('${dir.path}/$filename');
+        await file.writeAsBytes(response.bodyBytes);
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -227,6 +256,42 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
         });
       }
     }
+  }
+
+  void _openFullView(String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            backgroundColor: Colors.black,
+            elevation: 0,
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 5,
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.broken_image,
+                  color: Colors.white70,
+                  size: 56,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   void _openLiveControlSheet() {
@@ -362,18 +427,21 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(14),
-                              child: Image.network(
-                                item['image'] as String,
-                                height: 180,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(
+                              child: GestureDetector(
+                                onTap: () => _openFullView(imageUrl),
+                                child: Image.network(
+                                  imageUrl,
                                   height: 180,
-                                  color: Colors.grey,
-                                  child: const Icon(
-                                    Icons.broken_image,
-                                    color: Colors.white70,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) =>
+                                      Container(
+                                    height: 180,
+                                    color: Colors.grey,
+                                    child: const Icon(
+                                      Icons.broken_image,
+                                      color: Colors.white70,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -422,6 +490,18 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
                               ),
                             ],
                             const SizedBox(height: 10),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: IconButton(
+                                onPressed: () => _openFullView(imageUrl),
+                                tooltip: 'Full screen',
+                                icon: const Icon(
+                                  Icons.fullscreen,
+                                  color: Colors.white70,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
                             SizedBox(
                               width: double.infinity,
                               child: ElevatedButton(

@@ -1,6 +1,6 @@
 name: wildpulse_prototype_app
-description: "A new Flutter project."
-publish_to: 'none'
+description: "WildPulse Wildlife Monitoring Application"
+publish_to: "none"
 version: 1.0.0+1
 
 environment:
@@ -9,16 +9,23 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_map: ^8.1.1  # ✅ Updated version (compatible with latlong2 0.9.x)
-  latlong2: ^0.9.1     # ✅ Compatible with flutter_map >= 8.0.0
-  web_socket_channel: ^2.4.0
+
+  # Map and GPS
+  flutter_map: ^8.1.1
+  latlong2: ^0.9.1
   geolocator: ^11.1.0
-  path_provider: ^2.0.14
-  socket_io_client: ^2.0.0-beta.4-nullsafety.0
-  flutter_local_notifications: ^19.2.0
+
+  # Networking
   http: ^1.2.2
+  web_socket_channel: ^2.4.0
+  socket_io_client: ^2.0.0-beta.4-nullsafety.0
 
+  # Local storage & notifications
+  path_provider: ^2.0.14
+  flutter_local_notifications: ^19.2.0
 
+  # Charts for analytics dashboard
+  fl_chart: ^0.66.0
 
 dev_dependencies:
   flutter_test:
