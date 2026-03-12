@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+import '../core/app_api.dart';
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -12,11 +12,6 @@ class NotificationPage extends StatefulWidget {
 }
 
 class _NotificationPageState extends State<NotificationPage> {
-  static const String _baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://api.wildpulse.ink/api',
-  );
-
   List<Map<String, dynamic>> _items = [];
   final Set<String> _actionLoadingIds = {};
   bool _loading = true;
@@ -37,43 +32,50 @@ class _NotificationPageState extends State<NotificationPage> {
 
   Future<void> _fetchNeedsReview() async {
     try {
-      final params = <String, String>{
+      final params = AppApi.reportQuery({
         'limit': '100',
         'sortBy': _sortBy,
         'order': _order,
-      };
+      });
 
-      final uri = Uri.parse('$_baseUrl/needs-review')
-          .replace(queryParameters: params);
-      final response = await http.get(uri);
+      final response = await AppApi.getAdmin(
+        '/needs-review',
+        queryParameters: params,
+      );
       if (!mounted) return;
 
       if (response.statusCode != 200) {
         setState(() {
-          _error = 'Failed to fetch review queue: ${response.statusCode}';
+          _error =
+              response.statusCode == 401
+                  ? 'Admin session expired. Log in again.'
+                  : 'Failed to fetch review queue: ${response.statusCode}';
           _loading = false;
         });
         return;
       }
 
       final List<dynamic> data = jsonDecode(response.body);
-      final mapped = data.map<Map<String, dynamic>>((item) {
-        return {
-          'id': item['id'] as String? ?? '',
-          'url': item['url'] as String? ?? '',
-          'species': item['species'] as String? ?? 'unknown',
-          'confidence': (item['confidence'] as num?)?.toDouble() ?? 0,
-          'riskScore': (item['riskScore'] as num?)?.toInt() ?? 0,
-          'priority': item['priority'] as String? ?? 'low',
-          'capturedAt': (item['capturedAt'] ?? item['createdAt']) as String?,
-          'zoneId': item['zoneId'] as String?,
-          'aiSummary': item['aiSummary'] as String?,
-          'status': item['status'] as String? ?? 'needs_review',
-          'riskReasons': (item['riskReasons'] as List<dynamic>? ?? [])
-              .map((e) => e.toString())
-              .toList(),
-        };
-      }).toList();
+      final mapped =
+          data.map<Map<String, dynamic>>((item) {
+            return {
+              'id': item['id'] as String? ?? '',
+              'url': item['url'] as String? ?? '',
+              'species': item['species'] as String? ?? 'unknown',
+              'confidence': (item['confidence'] as num?)?.toDouble() ?? 0,
+              'riskScore': (item['riskScore'] as num?)?.toInt() ?? 0,
+              'priority': item['priority'] as String? ?? 'low',
+              'capturedAt':
+                  (item['capturedAt'] ?? item['createdAt']) as String?,
+              'zoneId': item['zoneId'] as String?,
+              'aiSummary': item['aiSummary'] as String?,
+              'status': item['status'] as String? ?? 'needs_review',
+              'riskReasons':
+                  (item['riskReasons'] as List<dynamic>? ?? [])
+                      .map((e) => e.toString())
+                      .toList(),
+            };
+          }).toList();
 
       setState(() {
         _items = mapped;
@@ -95,8 +97,8 @@ class _NotificationPageState extends State<NotificationPage> {
     });
 
     try {
-      final response = await http.patch(
-        Uri.parse('$_baseUrl/needs-review/$id/action'),
+      final response = await AppApi.patchAdmin(
+        '/needs-review/$id/action',
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'action': action}),
       );
@@ -105,7 +107,10 @@ class _NotificationPageState extends State<NotificationPage> {
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         setState(() {
-          _error = 'Failed to $action item: ${response.statusCode}';
+          _error =
+              response.statusCode == 401
+                  ? 'Admin session expired. Log in again.'
+                  : 'Failed to $action item: ${response.statusCode}';
         });
         return;
       }
@@ -150,11 +155,12 @@ class _NotificationPageState extends State<NotificationPage> {
               child: Image.network(
                 imageUrl,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.broken_image,
-                  color: Colors.white70,
-                  size: 56,
-                ),
+                errorBuilder:
+                    (_, __, ___) => const Icon(
+                      Icons.broken_image,
+                      color: Colors.white70,
+                      size: 56,
+                    ),
               ),
             ),
           ),
@@ -207,185 +213,199 @@ class _NotificationPageState extends State<NotificationPage> {
           ),
         ),
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _error != null
+      body:
+          _loading
+              ? const Center(child: CircularProgressIndicator())
+              : _error != null
               ? Center(
-                  child: Text(
-                    _error!,
-                    style: const TextStyle(color: Colors.redAccent),
-                    textAlign: TextAlign.center,
-                  ),
-                )
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.redAccent),
+                  textAlign: TextAlign.center,
+                ),
+              )
               : RefreshIndicator(
-                  onRefresh: _fetchNeedsReview,
-                  child: ListView(
-                    padding: const EdgeInsets.all(12),
-                    children: [
-                      if (_items.isEmpty)
-                        const Padding(
-                          padding: EdgeInsets.only(top: 140),
-                          child: Center(
-                            child: Text(
-                              'No items need review',
-                              style: TextStyle(color: Colors.white70),
-                            ),
+                onRefresh: _fetchNeedsReview,
+                child: ListView(
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    if (_items.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 140),
+                        child: Center(
+                          child: Text(
+                            'No items need review',
+                            style: TextStyle(color: Colors.white70),
                           ),
-                        )
-                      else
-                        ..._items.map((item) {
-                          final id = item['id'] as String;
-                          final confidence =
-                              ((item['confidence'] as double) * 100).toStringAsFixed(1);
-                          final reasons =
-                              (item['riskReasons'] as List<String>).join(', ');
-                          final isActionLoading = _actionLoadingIds.contains(id);
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 14),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[900],
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(14),
-                                  child: GestureDetector(
-                                    onTap: () => _openFullView(item['url'] as String),
-                                    child: Image.network(
-                                      item['url'] as String,
-                                      height: 180,
-                                      width: double.infinity,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
-                                        height: 180,
-                                        color: Colors.grey[800],
-                                        child: const Icon(
-                                          Icons.broken_image,
-                                          color: Colors.white70,
+                        ),
+                      )
+                    else
+                      ..._items.map((item) {
+                        final id = item['id'] as String;
+                        final confidence = ((item['confidence'] as double) *
+                                100)
+                            .toStringAsFixed(1);
+                        final reasons = (item['riskReasons'] as List<String>)
+                            .join(', ');
+                        final isActionLoading = _actionLoadingIds.contains(id);
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 14),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[900],
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(14),
+                                child: GestureDetector(
+                                  onTap:
+                                      () =>
+                                          _openFullView(item['url'] as String),
+                                  child: Image.network(
+                                    item['url'] as String,
+                                    height: 180,
+                                    width: double.infinity,
+                                    fit: BoxFit.cover,
+                                    errorBuilder:
+                                        (_, __, ___) => Container(
+                                          height: 180,
+                                          color: Colors.grey[800],
+                                          child: const Icon(
+                                            Icons.broken_image,
+                                            color: Colors.white70,
+                                          ),
                                         ),
-                                      ),
-                                    ),
                                   ),
                                 ),
-                                const SizedBox(height: 10),
-                                Text(
-                                  '${(item['species'] as String).toUpperCase()}  •  $confidence%',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                '${(item['species'] as String).toUpperCase()}  •  $confidence%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
                                 ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Status: ${item['status']} • Risk ${item['riskScore']} • ${item['priority']}',
-                                  style: const TextStyle(
-                                    color: Colors.amber,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Status: ${item['status']} • Risk ${item['riskScore']} • ${item['priority']}',
+                                style: const TextStyle(
+                                  color: Colors.amber,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                                const SizedBox(height: 4),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Time: ${_formatCapturedTime(item['capturedAt'] as String?)}',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              if ((item['zoneId'] as String?) != null)
                                 Text(
-                                  'Time: ${_formatCapturedTime(item['capturedAt'] as String?)}',
+                                  'Zone: ${item['zoneId']}',
                                   style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 12,
                                   ),
                                 ),
-                                if ((item['zoneId'] as String?) != null)
-                                  Text(
-                                    'Zone: ${item['zoneId']}',
+                              if (reasons.isNotEmpty)
+                                Text(
+                                  'Reasons: $reasons',
+                                  style: const TextStyle(
+                                    color: Colors.white60,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              if ((item['aiSummary'] as String?)
+                                      ?.trim()
+                                      .isNotEmpty ??
+                                  false) ...[
+                                const SizedBox(height: 8),
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black54,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    item['aiSummary'] as String,
                                     style: const TextStyle(
-                                      color: Colors.white70,
+                                      color: Colors.white,
                                       fontSize: 12,
                                     ),
                                   ),
-                                if (reasons.isNotEmpty)
-                                  Text(
-                                    'Reasons: $reasons',
-                                    style: const TextStyle(
-                                      color: Colors.white60,
-                                      fontSize: 12,
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed:
+                                          isActionLoading
+                                              ? null
+                                              : () =>
+                                                  _takeAction(id, 'approve'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.green[700],
+                                      ),
+                                      child: const Text('Approve'),
                                     ),
                                   ),
-                                if ((item['aiSummary'] as String?)?.trim().isNotEmpty ??
-                                    false) ...[
-                                  const SizedBox(height: 8),
-                                  Container(
-                                    width: double.infinity,
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black54,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Text(
-                                      item['aiSummary'] as String,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 12,
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed:
+                                          isActionLoading
+                                              ? null
+                                              : () =>
+                                                  _takeAction(id, 'discard'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.red[700],
                                       ),
+                                      child: const Text('Discard'),
                                     ),
                                   ),
-                                ],
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: isActionLoading
-                                            ? null
-                                            : () => _takeAction(id, 'approve'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.green[700],
-                                        ),
-                                        child: const Text('Approve'),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      onPressed:
+                                          isActionLoading
+                                              ? null
+                                              : () =>
+                                                  _takeAction(id, 'escalate'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.orange[700],
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: isActionLoading
-                                            ? null
-                                            : () => _takeAction(id, 'discard'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.red[700],
-                                        ),
-                                        child: const Text('Discard'),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: ElevatedButton(
-                                        onPressed: isActionLoading
-                                            ? null
-                                            : () => _takeAction(id, 'escalate'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.orange[700],
-                                        ),
-                                        child: isActionLoading
-                                            ? const SizedBox(
+                                      child:
+                                          isActionLoading
+                                              ? const SizedBox(
                                                 height: 16,
                                                 width: 16,
                                                 child:
                                                     CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                  color: Colors.white,
-                                                ),
+                                                      strokeWidth: 2,
+                                                      color: Colors.white,
+                                                    ),
                                               )
-                                            : const Text('Escalate'),
-                                      ),
+                                              : const Text('Escalate'),
                                     ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                    ],
-                  ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                  ],
                 ),
+              ),
     );
   }
 }

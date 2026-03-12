@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+import '../core/app_api.dart';
 
 class MonitoringFeedPage extends StatefulWidget {
   const MonitoringFeedPage({super.key});
@@ -15,17 +16,13 @@ class MonitoringFeedPage extends StatefulWidget {
 }
 
 class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
-  static const String _baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'https://api.wildpulse.ink/api',
-  );
-
   List<Map<String, dynamic>> feedItems = [];
   bool isLoading = true;
   String? errorMessage;
   Timer? _pollTimer;
-  final TextEditingController _deviceIdController =
-      TextEditingController(text: 'pi-001');
+  final TextEditingController _deviceIdController = TextEditingController(
+    text: 'pi-001',
+  );
   bool _commandLoading = false;
   final Set<String> _downloadLoadingKeys = {};
 
@@ -47,29 +44,37 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
     }
 
     try {
-      final response = await http.get(Uri.parse('$_baseUrl/images?limit=100'));
+      final response = await AppApi.getAdmin(
+        '/images',
+        queryParameters: AppApi.reportQuery({'limit': '100'}),
+      );
       if (!mounted) return;
 
       if (response.statusCode == 200) {
         final List data = jsonDecode(response.body);
         setState(() {
-          feedItems = data.map<Map<String, dynamic>>((item) {
-            return {
-              'image': item['url'] as String? ?? '',
-              'capturedOn': (item['capturedAt'] ?? item['createdAt']) as String?,
-              'species': item['species'] as String? ?? 'unknown',
-              'confidence': (item['confidence'] as num?)?.toDouble() ?? 0,
-              'aiSummary': item['aiSummary'] as String?,
-              'riskScore': (item['riskScore'] as num?)?.toInt() ?? 0,
-              'priority': item['priority'] as String? ?? 'low',
-            };
-          }).toList();
+          feedItems =
+              data.map<Map<String, dynamic>>((item) {
+                return {
+                  'image': item['url'] as String? ?? '',
+                  'capturedOn':
+                      (item['capturedAt'] ?? item['createdAt']) as String?,
+                  'species': item['species'] as String? ?? 'unknown',
+                  'confidence': (item['confidence'] as num?)?.toDouble() ?? 0,
+                  'aiSummary': item['aiSummary'] as String?,
+                  'riskScore': (item['riskScore'] as num?)?.toInt() ?? 0,
+                  'priority': item['priority'] as String? ?? 'low',
+                };
+              }).toList();
           isLoading = false;
           errorMessage = null;
         });
       } else {
         setState(() {
-          errorMessage = 'Failed to fetch images: ${response.statusCode}';
+          errorMessage =
+              response.statusCode == 401
+                  ? 'Admin session expired. Log in again.'
+                  : 'Failed to fetch images: ${response.statusCode}';
           isLoading = false;
         });
       }
@@ -138,8 +143,8 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
     });
 
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/pi/$deviceId/commands'),
+      final response = await AppApi.postAdmin(
+        '/pi/$deviceId/commands',
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'command': command,
@@ -152,7 +157,11 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to send command: ${response.statusCode}'),
+            content: Text(
+              response.statusCode == 401
+                  ? 'Admin session expired. Log in again.'
+                  : 'Failed to send command: ${response.statusCode}',
+            ),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -261,35 +270,37 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
   void _openFullView(String imageUrl) {
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            automaticallyImplyLeading: false,
-            backgroundColor: Colors.black,
-            elevation: 0,
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(context).pop(),
+        builder:
+            (context) => Scaffold(
+              backgroundColor: Colors.black,
+              appBar: AppBar(
+                automaticallyImplyLeading: false,
+                backgroundColor: Colors.black,
+                elevation: 0,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
               ),
-            ],
-          ),
-          body: Center(
-            child: InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 5,
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.broken_image,
-                  color: Colors.white70,
-                  size: 56,
+              body: Center(
+                child: InteractiveViewer(
+                  minScale: 0.8,
+                  maxScale: 5,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder:
+                        (_, __, ___) => const Icon(
+                          Icons.broken_image,
+                          color: Colors.white70,
+                          size: 56,
+                        ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
       ),
     );
   }
@@ -338,9 +349,10 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: _commandLoading
-                      ? null
-                      : () => _sendPiCommand('capture_now'),
+                  onPressed:
+                      _commandLoading
+                          ? null
+                          : () => _sendPiCommand('capture_now'),
                   icon: const Icon(Icons.camera_alt),
                   label: Text(_commandLoading ? 'Sending...' : 'Capture Now'),
                 ),
@@ -391,128 +403,136 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
           ),
         ),
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : errorMessage != null
+      body:
+          isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : errorMessage != null
               ? Center(
-                  child: Text(
-                    errorMessage!,
-                    style: const TextStyle(color: Colors.redAccent),
-                    textAlign: TextAlign.center,
-                  ),
-                )
+                child: Text(
+                  errorMessage!,
+                  style: const TextStyle(color: Colors.redAccent),
+                  textAlign: TextAlign.center,
+                ),
+              )
               : RefreshIndicator(
-                  onRefresh: () => _fetchFeedItems(showLoader: false),
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: feedItems.length,
-                    itemBuilder: (context, index) {
-                      final item = feedItems[index];
-                      final confidence =
-                          ((item['confidence'] as double) * 100).toStringAsFixed(1);
-                      final aiSummary = item['aiSummary'] as String?;
-                      final imageUrl = item['image'] as String;
-                      final downloadKey = item['capturedOn'] as String? ?? imageUrl;
-                      final isDownloading = _downloadLoadingKeys.contains(downloadKey);
+                onRefresh: () => _fetchFeedItems(showLoader: false),
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: feedItems.length,
+                  itemBuilder: (context, index) {
+                    final item = feedItems[index];
+                    final confidence = ((item['confidence'] as double) * 100)
+                        .toStringAsFixed(1);
+                    final aiSummary = item['aiSummary'] as String?;
+                    final imageUrl = item['image'] as String;
+                    final downloadKey =
+                        item['capturedOn'] as String? ?? imageUrl;
+                    final isDownloading = _downloadLoadingKeys.contains(
+                      downloadKey,
+                    );
 
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[900],
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: GestureDetector(
-                                onTap: () => _openFullView(imageUrl),
-                                child: Image.network(
-                                  imageUrl,
-                                  height: 180,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Container(
-                                    height: 180,
-                                    color: Colors.grey,
-                                    child: const Icon(
-                                      Icons.broken_image,
-                                      color: Colors.white70,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              '${(item['species'] as String).toUpperCase()}  •  $confidence%',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Captured on: ${_formatCapturedTime(item['capturedOn'] as String?)}',
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              'Risk ${item['riskScore']} • ${item['priority']}',
-                              style: const TextStyle(
-                                color: Colors.amber,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            if (aiSummary != null && aiSummary.trim().isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              Container(
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[900],
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(14),
+                            child: GestureDetector(
+                              onTap: () => _openFullView(imageUrl),
+                              child: Image.network(
+                                imageUrl,
+                                height: 180,
                                 width: double.infinity,
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.black54,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  aiSummary,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 13,
-                                  ),
-                                ),
+                                fit: BoxFit.cover,
+                                errorBuilder:
+                                    (context, error, stackTrace) => Container(
+                                      height: 180,
+                                      color: Colors.grey,
+                                      child: const Icon(
+                                        Icons.broken_image,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
                               ),
-                            ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            '${(item['species'] as String).toUpperCase()}  •  $confidence%',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Captured on: ${_formatCapturedTime(item['capturedOn'] as String?)}',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Risk ${item['riskScore']} • ${item['priority']}',
+                            style: const TextStyle(
+                              color: Colors.amber,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (aiSummary != null &&
+                              aiSummary.trim().isNotEmpty) ...[
                             const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: IconButton(
-                                onPressed: () => _openFullView(imageUrl),
-                                tooltip: 'Full screen',
-                                icon: const Icon(
-                                  Icons.fullscreen,
-                                  color: Colors.white70,
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                aiSummary,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: isDownloading
-                                    ? null
-                                    : () => _downloadImage(downloadKey, imageUrl),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue[700],
-                                ),
-                                child: isDownloading
-                                    ? const SizedBox(
+                          ],
+                          const SizedBox(height: 10),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: IconButton(
+                              onPressed: () => _openFullView(imageUrl),
+                              tooltip: 'Full screen',
+                              icon: const Icon(
+                                Icons.fullscreen,
+                                color: Colors.white70,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed:
+                                  isDownloading
+                                      ? null
+                                      : () =>
+                                          _downloadImage(downloadKey, imageUrl),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue[700],
+                              ),
+                              child:
+                                  isDownloading
+                                      ? const SizedBox(
                                         height: 16,
                                         width: 16,
                                         child: CircularProgressIndicator(
@@ -520,15 +540,15 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
                                           color: Colors.white,
                                         ),
                                       )
-                                    : const Text('Download'),
-                              ),
+                                      : const Text('Download'),
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
+              ),
     );
   }
 }

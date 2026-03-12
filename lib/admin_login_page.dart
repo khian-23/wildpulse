@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'core/admin_session.dart';
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
@@ -11,10 +12,8 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
   final TextEditingController _passcodeController = TextEditingController();
   String? _errorText;
 
-  final String _correctPasscode = '1234';
-
   void _validatePasscode() {
-    if (_passcodeController.text == _correctPasscode) {
+    if (AdminSession.login(_passcodeController.text.trim())) {
       setState(() {
         _errorText = null;
       });
