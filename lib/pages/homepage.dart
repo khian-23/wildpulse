@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'notification.dart';
 import 'monitoring.dart';
 import 'reports.dart';
+import 'device_location_page.dart';
 import '../core/app_api.dart';
 
 class HomePage extends StatefulWidget {
@@ -603,6 +604,7 @@ class _HomePageState extends State<HomePage> {
       const ReportsPage(),
       const NotificationPage(),
       const MonitoringFeedPage(),
+      const DeviceLocationPage(),
     ];
 
     return Scaffold(
@@ -634,6 +636,10 @@ class _HomePageState extends State<HomePage> {
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.photo_library_outlined),
+            label: '',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.map_outlined),
             label: '',
           ),
         ],

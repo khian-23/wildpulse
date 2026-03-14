@@ -177,6 +177,8 @@ class _ReportsPageState extends State<ReportsPage> {
 
     setState(() {
       _mode = mode;
+      _hasUserPickedDate = false;
+      _selectedDate = DateTime.now();
     });
 
     _fetchReport();
@@ -439,7 +441,7 @@ class _ReportsPageState extends State<ReportsPage> {
     Map<String, dynamic> totals,
     int needsReviewCount,
   ) {
-    final backendSummary = report['summary']?.toString().trim();
+    final backendSummary = (report['summary']?.toString() ?? '').trim();
     if (backendSummary != null && backendSummary.isNotEmpty) {
       return backendSummary;
     }

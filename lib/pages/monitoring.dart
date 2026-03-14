@@ -21,7 +21,7 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
   String? errorMessage;
   Timer? _pollTimer;
   final TextEditingController _deviceIdController = TextEditingController(
-    text: 'pi-001',
+    text: 'wildpulse-001',
   );
   bool _commandLoading = false;
   final Set<String> _downloadLoadingKeys = {};
@@ -227,13 +227,17 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
       File file;
       try {
         if (Platform.isAndroid) {
-          final downloadDir = Directory('/storage/emulated/0/Download');
-          if (!await downloadDir.exists()) {
-            await downloadDir.create(recursive: true);
+          final downloadDir = await getExternalStorageDirectory();
+          final baseDir =
+              downloadDir ?? await getApplicationDocumentsDirectory();
+          if (!await baseDir.exists()) {
+            await baseDir.create(recursive: true);
           }
-          file = File('${downloadDir.path}/$filename');
+          file = File('${baseDir.path}/$filename');
         } else {
-          final dir = await getApplicationDocumentsDirectory();
+          final dir =
+              await getDownloadsDirectory() ??
+              await getApplicationDocumentsDirectory();
           file = File('${dir.path}/$filename');
         }
         await file.writeAsBytes(response.bodyBytes);
@@ -335,7 +339,7 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
                 controller: _deviceIdController,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
-                  hintText: 'Device ID (e.g. pi-001)',
+                  hintText: 'Device ID (e.g. wildpulse-001)',
                   hintStyle: const TextStyle(color: Colors.white54),
                   filled: true,
                   fillColor: Colors.black54,

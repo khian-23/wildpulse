@@ -8,7 +8,7 @@ class AppApi {
     defaultValue: 'https://api.wildpulse.ink/api',
   );
 
-  static const String deviceId = 'pi-001';
+  static const String deviceId = 'wildpulse-001';
 
   static Uri uri(String path, [Map<String, String>? queryParameters]) {
     final normalizedPath = path.startsWith('/') ? path : '/$path';

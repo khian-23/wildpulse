@@ -13,6 +13,14 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
   String? _errorText;
 
   void _validatePasscode() {
+    final configError = AdminSession.configurationError;
+    if (configError != null) {
+      setState(() {
+        _errorText = '$configError Set ADMIN_PASSCODE and ADMIN_SECRET.';
+      });
+      return;
+    }
+
     if (AdminSession.login(_passcodeController.text.trim())) {
       setState(() {
         _errorText = null;
