@@ -1,3 +1,4 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
 import 'admin_session.dart';
@@ -8,12 +9,27 @@ class AppApi {
     defaultValue: 'https://api.wildpulse.ink/api',
   );
 
+  static String resolveBaseUrl() {
+    final envValue = const String.fromEnvironment(
+      'API_BASE_URL',
+      defaultValue: '',
+    );
+    if (envValue.isNotEmpty) {
+      return envValue;
+    }
+    final dotenvValue = dotenv.env['API_BASE_URL'] ?? '';
+    if (dotenvValue.isNotEmpty) {
+      return dotenvValue;
+    }
+    return baseUrl;
+  }
+
   static const String deviceId = 'wildpulse-001';
 
   static Uri uri(String path, [Map<String, String>? queryParameters]) {
     final normalizedPath = path.startsWith('/') ? path : '/$path';
     return Uri.parse(
-      '$baseUrl$normalizedPath',
+      '${resolveBaseUrl()}$normalizedPath',
     ).replace(queryParameters: queryParameters);
   }
 

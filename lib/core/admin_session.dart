@@ -1,3 +1,5 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 class AdminSession {
   static const String _configuredAdminKey = String.fromEnvironment(
     'ADMIN_SECRET',
@@ -17,33 +19,49 @@ class AdminSession {
   static bool get isLoggedIn => (adminKey ?? '').isNotEmpty;
 
   static String? get configurationError {
-    if (_allowInsecureDefaults) {
+    final envKey = dotenv.env['ADMIN_SECRET'];
+    final envPasscode = dotenv.env['ADMIN_PASSCODE'];
+    final hasDartDefine =
+        _configuredAdminKey.isNotEmpty &&
+        _loginPasscode.isNotEmpty &&
+        _configuredAdminKey != 'PLACEHOLDER' &&
+        _loginPasscode != 'PLACEHOLDER';
+    final hasDotEnv =
+        (envKey ?? '').isNotEmpty && (envPasscode ?? '').isNotEmpty;
+
+    if (hasDartDefine || hasDotEnv || _allowInsecureDefaults) {
       return null;
     }
-    if (_configuredAdminKey.isEmpty || _loginPasscode.isEmpty) {
-      return 'Admin access is not configured.';
-    }
-    return null;
+
+    return 'Admin access is not configured.';
   }
 
   static bool login(String passcode) {
     final configuredKey =
-        _configuredAdminKey.isNotEmpty
+        _configuredAdminKey.isNotEmpty &&
+                _configuredAdminKey != 'PLACEHOLDER'
             ? _configuredAdminKey
-            : (_allowInsecureDefaults ? '1234' : '');
+            : (dotenv.env['ADMIN_SECRET'] ?? '');
     final configuredPasscode =
-        _loginPasscode.isNotEmpty
+        _loginPasscode.isNotEmpty &&
+                _loginPasscode != 'PLACEHOLDER'
             ? _loginPasscode
-            : (_allowInsecureDefaults ? '1234' : '');
+            : (dotenv.env['ADMIN_PASSCODE'] ?? '');
 
-    if (configuredKey.isEmpty || configuredPasscode.isEmpty) {
+    final fallbackKey = _allowInsecureDefaults ? '1234' : '';
+    final fallbackPasscode = _allowInsecureDefaults ? '1234' : '';
+    final resolvedKey = configuredKey.isNotEmpty ? configuredKey : fallbackKey;
+    final resolvedPasscode =
+        configuredPasscode.isNotEmpty ? configuredPasscode : fallbackPasscode;
+
+    if (resolvedKey.isEmpty || resolvedPasscode.isEmpty) {
       return false;
     }
-    if (passcode != configuredPasscode) {
+    if (passcode != resolvedPasscode) {
       return false;
     }
 
-    adminKey = configuredKey;
+    adminKey = resolvedKey;
     return true;
   }
 

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import '../core/app_api.dart';
+import 'device_profile_page.dart';
 
 class MonitoringFeedPage extends StatefulWidget {
   const MonitoringFeedPage({super.key});
@@ -359,6 +360,25 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
                           : () => _sendPiCommand('capture_now'),
                   icon: const Icon(Icons.camera_alt),
                   label: Text(_commandLoading ? 'Sending...' : 'Capture Now'),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
+                    final deviceId = _deviceIdController.text.trim();
+                    if (deviceId.isEmpty) {
+                      return;
+                    }
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => DeviceProfilePage(deviceId: deviceId),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.info_outline),
+                  label: const Text('Open Device Profile'),
                 ),
               ),
             ],

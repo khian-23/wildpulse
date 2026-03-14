@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:wildpulse_prototype_app/pages/homepage.dart';
 import 'welcome_page.dart';
 import 'admin_login_page.dart';
@@ -6,7 +7,13 @@ import 'pages/notification.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/io.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await dotenv.load(fileName: '.env');
+  } catch (_) {
+    // .env is optional; fall back to dart-define defaults.
+  }
   runApp(const MyApp());
 }
 

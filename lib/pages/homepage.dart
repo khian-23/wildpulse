@@ -5,6 +5,7 @@ import 'notification.dart';
 import 'monitoring.dart';
 import 'reports.dart';
 import 'device_location_page.dart';
+import 'device_profile_page.dart';
 import '../core/app_api.dart';
 
 class HomePage extends StatefulWidget {
@@ -299,6 +300,53 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _buildDeviceProfileCard(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.grey[900],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.memory, color: Colors.lightGreenAccent, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Device Profile',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Primary device: ${AppApi.deviceId}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder:
+                      (_) => DeviceProfilePage(deviceId: AppApi.deviceId),
+                ),
+              );
+            },
+            child: const Text('View'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHomePageContent() {
     return ListView(
       padding: const EdgeInsets.all(12.0),
@@ -365,6 +413,7 @@ class _HomePageState extends State<HomePage> {
           }),
         ),
         const SizedBox(height: 12),
+        _buildDeviceProfileCard(context),
         const SizedBox(height: 6),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -1,6 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import '../core/app_api.dart';
 
 class ReportsPage extends StatefulWidget {
@@ -20,6 +24,10 @@ class _ReportsPageState extends State<ReportsPage> {
   String? _emptyMessage;
 
   Map<String, dynamic>? _report;
+  List<Map<String, dynamic>> _images = [];
+  bool _imagesLoading = false;
+  String? _imagesError;
+  final Set<String> _downloadLoadingKeys = {};
 
   Map<String, dynamic> _asStringMap(dynamic value) {
     if (value is Map<String, dynamic>) {
@@ -95,6 +103,234 @@ class _ReportsPageState extends State<ReportsPage> {
     return trend.isNotEmpty;
   }
 
+  Map<String, DateTime> _reportRange() {
+    final base = DateTime(
+      _selectedDate.year,
+      _selectedDate.month,
+      _selectedDate.day,
+    );
+    switch (_mode) {
+      case 'weekly':
+        return {
+          'start': base.subtract(const Duration(days: 6)),
+          'end': base.add(const Duration(days: 1)),
+        };
+      case 'monthly':
+        return {
+          'start': DateTime(_selectedDate.year, _selectedDate.month, 1),
+          'end': DateTime(_selectedDate.year, _selectedDate.month + 1, 1),
+        };
+      case 'yearly':
+        return {
+          'start': DateTime(_selectedDate.year, 1, 1),
+          'end': DateTime(_selectedDate.year + 1, 1, 1),
+        };
+      default:
+        return {
+          'start': base,
+          'end': base.add(const Duration(days: 1)),
+        };
+    }
+  }
+
+  String _formatCapturedTime(String? isoTime) {
+    if (isoTime == null || isoTime.isEmpty) return 'Unknown time';
+    try {
+      final dateTime = DateTime.parse(isoTime).toLocal();
+      final month = [
+        'Jan',
+        'Feb',
+        'Mar',
+        'Apr',
+        'May',
+        'Jun',
+        'Jul',
+        'Aug',
+        'Sep',
+        'Oct',
+        'Nov',
+        'Dec',
+      ][dateTime.month - 1];
+      final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
+      final minute = dateTime.minute.toString().padLeft(2, '0');
+      final period = dateTime.hour >= 12 ? 'PM' : 'AM';
+      return '$month ${dateTime.day}, ${dateTime.year} • $hour:$minute $period';
+    } catch (_) {
+      return 'Unknown time';
+    }
+  }
+
+  void _openFullView(String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder:
+            (context) => Scaffold(
+              backgroundColor: Colors.black,
+              appBar: AppBar(
+                automaticallyImplyLeading: false,
+                backgroundColor: Colors.black,
+                elevation: 0,
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              body: Center(
+                child: InteractiveViewer(
+                  minScale: 0.8,
+                  maxScale: 5,
+                  child: Image.network(
+                    imageUrl,
+                    fit: BoxFit.contain,
+                    errorBuilder:
+                        (_, __, ___) => const Icon(
+                          Icons.broken_image,
+                          color: Colors.white70,
+                          size: 56,
+                        ),
+                  ),
+                ),
+              ),
+            ),
+      ),
+    );
+  }
+
+  Future<void> _downloadImage(String key, String imageUrl) async {
+    setState(() {
+      _downloadLoadingKeys.add(key);
+    });
+
+    try {
+      if (kIsWeb) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Web app: open image in a new tab then use browser Save image.',
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+
+      final response = await http.get(Uri.parse(imageUrl));
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to download image: ${response.statusCode}'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+        return;
+      }
+
+      final filename = 'wildpulse_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      File file;
+      try {
+        if (Platform.isAndroid) {
+          final downloadDir = await getExternalStorageDirectory();
+          final baseDir =
+              downloadDir ?? await getApplicationDocumentsDirectory();
+          if (!await baseDir.exists()) {
+            await baseDir.create(recursive: true);
+          }
+          file = File('${baseDir.path}/$filename');
+        } else {
+          final dir =
+              await getDownloadsDirectory() ??
+              await getApplicationDocumentsDirectory();
+          file = File('${dir.path}/$filename');
+        }
+        await file.writeAsBytes(response.bodyBytes);
+      } catch (_) {
+        final dir = await getApplicationDocumentsDirectory();
+        file = File('${dir.path}/$filename');
+        await file.writeAsBytes(response.bodyBytes);
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Downloaded: ${file.path}'),
+          backgroundColor: Colors.green[700],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to download image: $e'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _downloadLoadingKeys.remove(key);
+        });
+      }
+    }
+  }
+
+  Future<void> _fetchImagesForRange() async {
+    setState(() {
+      _imagesLoading = true;
+      _imagesError = null;
+      _images = [];
+    });
+
+    final range = _reportRange();
+    final startIso = range['start']!.toUtc().toIso8601String();
+    final endIso = range['end']!.toUtc().toIso8601String();
+
+    try {
+      final response = await AppApi.getAdmin(
+        '/images',
+        queryParameters: AppApi.reportQuery({
+          'limit': '30',
+          'startDate': startIso,
+          'endDate': endIso,
+        }),
+      );
+
+      if (!mounted) return;
+
+      if (response.statusCode != 200) {
+        setState(() {
+          _imagesLoading = false;
+          _imagesError =
+              response.statusCode == 401
+                  ? 'Admin session expired. Log in again.'
+                  : 'Failed to load images: ${response.statusCode}';
+        });
+        return;
+      }
+
+      final List data = jsonDecode(response.body) as List;
+      final images =
+          data.map<Map<String, dynamic>>((item) {
+            return Map<String, dynamic>.from(item as Map);
+          }).toList();
+
+      setState(() {
+        _images = images;
+        _imagesLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _imagesLoading = false;
+        _imagesError = 'Failed to load images: $e';
+      });
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -161,6 +397,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   : 'No $_modeLabel report data is available yet for today.';
         }
       });
+      await _fetchImagesForRange();
     } catch (e) {
       if (!mounted) return;
 
@@ -192,15 +429,15 @@ class _ReportsPageState extends State<ReportsPage> {
       lastDate: DateTime.now(),
     );
 
-    if (picked != null) {
-      setState(() {
-        _selectedDate = picked;
-        _hasUserPickedDate = true;
-      });
+      if (picked != null) {
+        setState(() {
+          _selectedDate = picked;
+          _hasUserPickedDate = true;
+        });
 
-      _fetchReport();
+        _fetchReport();
+      }
     }
-  }
 
   Widget _metricCard(String title, String value, Color color) {
     return Expanded(
@@ -623,6 +860,165 @@ class _ReportsPageState extends State<ReportsPage> {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Captured Images',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_imagesLoading)
+                      const LinearProgressIndicator()
+                    else if (_imagesError != null)
+                      Text(
+                        _imagesError!,
+                        style: const TextStyle(color: Colors.redAccent),
+                      )
+                    else if (_images.isEmpty)
+                      const Text(
+                        'No captures found for this period.',
+                        style: TextStyle(color: Colors.white70),
+                      )
+                    else
+                      ..._images.map((item) {
+                        final imageUrl = item['url']?.toString() ?? '';
+                        final species = item['species']?.toString() ?? 'unknown';
+                        final capturedAt =
+                            item['capturedAt']?.toString() ??
+                            item['createdAt']?.toString();
+                        final confidence =
+                            (item['confidence'] as num?)?.toDouble();
+                        final downloadKey =
+                            capturedAt ?? imageUrl;
+                        final isDownloading = _downloadLoadingKeys.contains(
+                          downloadKey,
+                        );
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E1E1E),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              if (imageUrl.isNotEmpty)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: GestureDetector(
+                                    onTap: () => _openFullView(imageUrl),
+                                    child: Image.network(
+                                      imageUrl,
+                                      width: 70,
+                                      height: 70,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (_, __, ___) => Container(
+                                            width: 70,
+                                            height: 70,
+                                            color: Colors.black26,
+                                            child: const Icon(
+                                              Icons.broken_image,
+                                              color: Colors.white54,
+                                            ),
+                                          ),
+                                    ),
+                                  ),
+                                )
+                              else
+                                Container(
+                                  width: 70,
+                                  height: 70,
+                                  decoration: BoxDecoration(
+                                    color: Colors.black26,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.photo,
+                                    color: Colors.white54,
+                                  ),
+                                ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      species.toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _formatCapturedTime(capturedAt),
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    if (confidence != null)
+                                      Text(
+                                        'Confidence: ${(confidence * 100).toStringAsFixed(1)}%',
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        IconButton(
+                                          tooltip: 'Full view',
+                                          icon: const Icon(
+                                            Icons.fullscreen,
+                                            color: Colors.white70,
+                                          ),
+                                          onPressed:
+                                              imageUrl.isEmpty
+                                                  ? null
+                                                  : () => _openFullView(imageUrl),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        SizedBox(
+                                          height: 32,
+                                          child: ElevatedButton(
+                                            onPressed:
+                                                imageUrl.isEmpty ||
+                                                        isDownloading
+                                                    ? null
+                                                    : () => _downloadImage(
+                                                      downloadKey,
+                                                      imageUrl,
+                                                    ),
+                                            child:
+                                                isDownloading
+                                                    ? const SizedBox(
+                                                      height: 14,
+                                                      width: 14,
+                                                      child:
+                                                          CircularProgressIndicator(
+                                                            strokeWidth: 2,
+                                                            color: Colors.white,
+                                                          ),
+                                                    )
+                                                    : const Text('Download'),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
                   ],
                 ),
               ),

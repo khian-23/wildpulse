@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../core/app_api.dart';
+import 'device_profile_page.dart';
 
 class DeviceLocationPage extends StatefulWidget {
   const DeviceLocationPage({super.key});
@@ -16,6 +18,17 @@ class _DeviceLocationPageState extends State<DeviceLocationPage> {
     'MAPTILER_KEY',
     defaultValue: '',
   );
+  String _resolvedMapKey() {
+    final dartDefine = _mapTilerKey.trim();
+    if (dartDefine.isNotEmpty && dartDefine != 'YOUR_MAPTILER_KEY') {
+      return dartDefine;
+    }
+    final envKey = (dotenv.env['MAPTILER_KEY'] ?? '').trim();
+    if (envKey.isNotEmpty && envKey != 'YOUR_MAPTILER_KEY') {
+      return envKey;
+    }
+    return '';
+  }
   final LatLng _center = LatLng(10.2797, 122.8563);
   List<Map<String, dynamic>> _devices = [];
   bool _loading = true;
@@ -116,7 +129,8 @@ class _DeviceLocationPageState extends State<DeviceLocationPage> {
 
   @override
   Widget build(BuildContext context) {
-    final hasMapKey = _mapTilerKey.trim().isNotEmpty;
+    final resolvedKey = _resolvedMapKey();
+    final hasMapKey = resolvedKey.trim().isNotEmpty;
     final markerPoint = _selectedLocation;
     return Scaffold(
       backgroundColor: Colors.black,
@@ -172,7 +186,7 @@ class _DeviceLocationPageState extends State<DeviceLocationPage> {
                       if (hasMapKey)
                         TileLayer(
                           urlTemplate:
-                              'https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=$_mapTilerKey',
+                              'https://api.maptiler.com/maps/streets/{z}/{x}/{y}.png?key=$resolvedKey',
                           userAgentPackageName: 'wildpulse_prototype_app',
                         )
                       else
@@ -300,11 +314,33 @@ class _DeviceLocationPageState extends State<DeviceLocationPage> {
                                               ),
                                             ],
                                           ),
-                                          Icon(
-                                            Icons.location_pin,
-                                            color: isOnline
-                                                ? Colors.green
-                                                : Colors.grey,
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                Icons.location_pin,
+                                                color: isOnline
+                                                    ? Colors.green
+                                                    : Colors.grey,
+                                              ),
+                                              IconButton(
+                                                tooltip: 'Open profile',
+                                                icon: const Icon(
+                                                  Icons.info_outline,
+                                                  color: Colors.white70,
+                                                ),
+                                                onPressed: () {
+                                                  Navigator.of(context).push(
+                                                    MaterialPageRoute(
+                                                      builder:
+                                                          (_) => DeviceProfilePage(
+                                                            deviceId: deviceId,
+                                                          ),
+                                                    ),
+                                                  );
+                                                },
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
