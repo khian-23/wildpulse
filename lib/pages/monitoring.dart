@@ -58,8 +58,7 @@ class _MonitoringFeedPageState extends State<MonitoringFeedPage> {
               data.map<Map<String, dynamic>>((item) {
                 return {
                   'image': item['url'] as String? ?? '',
-                  'capturedOn':
-                      (item['capturedAt'] ?? item['createdAt']) as String?,
+                  'capturedOn': item['capturedAt'] as String?,
                   'species': item['species'] as String? ?? 'unknown',
                   'confidence': (item['confidence'] as num?)?.toDouble() ?? 0,
                   'aiSummary': item['aiSummary'] as String?,

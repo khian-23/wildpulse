@@ -48,20 +48,18 @@ class AdminSession {
             ? _loginPasscode
             : (dotenv.env['ADMIN_PASSCODE'] ?? '');
 
-    final fallbackKey = _allowInsecureDefaults ? '1234' : '';
     final fallbackPasscode = _allowInsecureDefaults ? '1234' : '';
-    final resolvedKey = configuredKey.isNotEmpty ? configuredKey : fallbackKey;
     final resolvedPasscode =
         configuredPasscode.isNotEmpty ? configuredPasscode : fallbackPasscode;
 
-    if (resolvedKey.isEmpty || resolvedPasscode.isEmpty) {
+    if (resolvedPasscode.isEmpty) {
       return false;
     }
     if (passcode != resolvedPasscode) {
       return false;
     }
 
-    adminKey = resolvedKey;
+    adminKey = resolvedPasscode;
     return true;
   }
 

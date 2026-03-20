@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "1046649602563",
+    "firebase_url": "https://espproject-bafd4-default-rtdb.firebaseio.com",
+    "project_id": "espproject-bafd4",
+    "storage_bucket": "espproject-bafd4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1046649602563:android:84f9fb84eb723eba540436",
+        "android_client_info": {
+          "package_name": "com.example.wildpulse_prototype_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBeP-NUcyqyBUmS6ASCfSkJsEJu3hEgjiE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

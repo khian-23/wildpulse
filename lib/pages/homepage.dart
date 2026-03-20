@@ -7,6 +7,7 @@ import 'reports.dart';
 import 'device_location_page.dart';
 import 'device_profile_page.dart';
 import '../core/app_api.dart';
+import '../core/push_notifications.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -49,6 +50,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    PushNotifications.registerDeviceToken();
     _fetchDashboardOverview();
     _fetchConservationList();
   }

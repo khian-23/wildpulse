@@ -388,10 +388,7 @@ class _DeviceProfilePageState extends State<DeviceProfilePage> {
                     else
                       ..._captures.map((item) {
                         final species = item['species']?.toString() ?? 'unknown';
-                        final capturedAt =
-                            item['capturedAt']?.toString() ??
-                            item['captured_at']?.toString() ??
-                            item['createdAt']?.toString();
+                        final capturedAt = item['capturedAt']?.toString();
                         final confidence =
                             (item['confidence'] as num?)?.toDouble();
                         final imageUrl =

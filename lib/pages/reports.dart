@@ -886,9 +886,7 @@ class _ReportsPageState extends State<ReportsPage> {
                       ..._images.map((item) {
                         final imageUrl = item['url']?.toString() ?? '';
                         final species = item['species']?.toString() ?? 'unknown';
-                        final capturedAt =
-                            item['capturedAt']?.toString() ??
-                            item['createdAt']?.toString();
+                        final capturedAt = item['capturedAt']?.toString();
                         final confidence =
                             (item['confidence'] as num?)?.toDouble();
                         final downloadKey =

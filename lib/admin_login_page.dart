@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'core/admin_session.dart';
+import 'core/app_api.dart';
 
 class AdminLoginPage extends StatefulWidget {
   const AdminLoginPage({super.key});
@@ -111,6 +112,7 @@ class _AdminLoginPageState extends State<AdminLoginPage> {
                   ),
                   child: const Text('Login', style: TextStyle(fontSize: 16)),
                 ),
+                const SizedBox(height: 24),
               ],
             ),
           ),

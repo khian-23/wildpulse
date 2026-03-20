@@ -17,7 +17,7 @@ class _NotificationPageState extends State<NotificationPage> {
   bool _loading = true;
   String? _error;
   Timer? _pollTimer;
-  final String _sortBy = 'createdAt';
+  final String _sortBy = 'capturedAt';
   final String _order = 'desc';
 
   @override
@@ -65,8 +65,7 @@ class _NotificationPageState extends State<NotificationPage> {
               'confidence': (item['confidence'] as num?)?.toDouble() ?? 0,
               'riskScore': (item['riskScore'] as num?)?.toInt() ?? 0,
               'priority': item['priority'] as String? ?? 'low',
-              'capturedAt':
-                  (item['capturedAt'] ?? item['createdAt']) as String?,
+              'capturedAt': item['capturedAt'] as String?,
               'zoneId': item['zoneId'] as String?,
               'aiSummary': item['aiSummary'] as String?,
               'status': item['status'] as String? ?? 'needs_review',

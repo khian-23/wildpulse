@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:wildpulse_prototype_app/pages/homepage.dart';
+import 'core/push_notifications.dart';
 import 'welcome_page.dart';
 import 'admin_login_page.dart';
 import 'pages/notification.dart';
@@ -14,6 +15,7 @@ Future<void> main() async {
   } catch (_) {
     // .env is optional; fall back to dart-define defaults.
   }
+  await PushNotifications.initialize();
   runApp(const MyApp());
 }
 
