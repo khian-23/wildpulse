@@ -30,7 +30,7 @@ class PushNotifications {
       sound: true,
     );
 
-    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings('ic_notification');
     const initSettings = InitializationSettings(android: androidInit);
     await _localNotifications.initialize(initSettings);
 
@@ -87,6 +87,7 @@ class PushNotifications {
       channelDescription: 'Capture notifications',
       importance: Importance.high,
       priority: Priority.high,
+      icon: 'ic_notification',
     );
     final details = NotificationDetails(android: androidDetails);
 
